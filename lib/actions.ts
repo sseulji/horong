@@ -48,10 +48,11 @@ export async function addBook(formData: FormData) {
 
   if (!bookId) {
     const parsed = z
-      .object({ title: z.string().min(1).max(300), author: z.string().max(300), externalId: z.string().min(1).max(100) })
+      .object({ title: z.string().min(1).max(300), author: z.string().max(300), externalId: z.string().min(1).max(300), source: z.enum(["kakao", "openlibrary"]) })
       .safeParse(f);
     if (!parsed.success) redirect("/discover?error=1");
-    const { data: existing } = await supabase.from("books").select("id").eq("source", "openlibrary").eq("external_id", f.externalId).maybeSingle();
+    const source = f.source as "kakao" | "openlibrary";
+    const { data: existing } = await supabase.from("books").select("id").eq("source", source).eq("external_id", f.externalId).maybeSingle();
     if (existing) bookId = existing.id;
     else {
       const isbn = /^[0-9]{13}$/.test(f.isbn13 ?? "") ? f.isbn13 : null;
@@ -62,7 +63,7 @@ export async function addBook(formData: FormData) {
           .from("books")
           .insert({
             title: f.title, author: f.author || "작자 미상", published_year: f.year ? Number(f.year) : null,
-            isbn13: isbn, cover_url: f.coverUrl || null, source: "openlibrary", external_id: f.externalId, created_by: user.id, scene_count: 10,
+            isbn13: isbn, cover_url: f.coverUrl || null, publisher: f.publisher || null, source, external_id: f.externalId, created_by: user.id, scene_count: 10,
           })
           .select("id")
           .single();

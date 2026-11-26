@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/server";
 import { addBook } from "@/lib/actions";
-import { searchOpenLibrary } from "@/lib/books";
+import { searchBooks } from "@/lib/books";
 import { BookCover, SectionTitle } from "@/components/ui";
 
 export const metadata = { title: "발견" };
@@ -19,7 +19,8 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
       ? await dbQuery.eq("isbn13", term.replace(/-/g, ""))
       : await dbQuery.or(`title.ilike.%${term.replace(/[%,()]/g, "")}%,author.ilike.%${term.replace(/[%,()]/g, "")}%`)
     : await dbQuery.eq("source", "seed");
-  const external = term ? await searchOpenLibrary(term) : [];
+  const ext = term ? await searchBooks(term) : null;
+  const external = ext?.hits ?? [];
   const { data: mine } = await supabase.from("user_books").select("book_id, current_scene, books(title)").eq("user_id", user.id).neq("status", "done");
   const owned = new Set((mine ?? []).map((m) => m.book_id));
 
@@ -30,7 +31,7 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
 
       <form role="search" className="glass flex h-12 items-center gap-2.5 rounded-2xl px-4">
         <label htmlFor="dq" className="sr-only-input">도서 검색</label>
-        <input id="dq" name="q" defaultValue={q} placeholder="제목, 저자, ISBN" className="h-full min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[#8F8AB8]" />
+        <input id="dq" name="q" defaultValue={q} placeholder="제목, 저자, ISBN으로 국내 도서 검색" className="h-full min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[#8F8AB8]" />
         <button className="min-h-10 rounded-full bg-flame px-4 text-sm font-semibold text-white">검색</button>
       </form>
 
@@ -67,21 +68,22 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
 
       {term && (
         <section aria-labelledby="h-ol" className="flex flex-col gap-3">
-          <SectionTitle id="h-ol">Open Library 검색 결과</SectionTitle>
+          <SectionTitle id="h-ol">더 많은 책</SectionTitle>
           {external.map((b) => (
             <form key={b.externalId} action={addBook} className="flex items-center gap-3.5 rounded-[18px] border line p-3">
               <BookCover title={b.title} url={b.coverUrl} className="w-12 h-16" />
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate font-serif text-base">{b.title}</span>
-                <span className="truncate text-xs text-ink-3">{b.author}{b.year ? ` · ${b.year}` : ""}{b.isbn13 ? ` · ISBN ${b.isbn13}` : ""}</span>
+                <span className="truncate text-xs text-ink-3">{b.author}{b.publisher ? ` · ${b.publisher}` : ""}{b.year ? ` · ${b.year}` : ""}</span>
+                {b.isbn13 && <span className="truncate text-[11px] text-ink-3">ISBN {b.isbn13}</span>}
               </div>
-              {(["title", "author", "externalId", "isbn13", "coverUrl"] as const).map((k) => <input key={k} type="hidden" name={k} value={b[k] ?? ""} />)}
+              {(["title", "author", "externalId", "isbn13", "coverUrl", "publisher", "source"] as const).map((k) => <input key={k} type="hidden" name={k} value={b[k] ?? ""} />)}
               <input type="hidden" name="year" value={b.year ?? ""} />
               <button className="min-h-10 shrink-0 rounded-full border border-lavender/35 px-3.5 text-[13px]">담기</button>
             </form>
           ))}
           {!external.length && <p className="text-sm text-ink-3">검색 결과가 없거나 외부 검색에 연결할 수 없어요.</p>}
-          <p className="text-xs text-ink-3">도서 정보 출처: Open Library (openlibrary.org)</p>
+          {ext && <p className="text-xs text-ink-3">{ext.attribution}</p>}
         </section>
       )}
     </main>
